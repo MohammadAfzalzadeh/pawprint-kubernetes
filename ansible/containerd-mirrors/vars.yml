@@ -1,0 +1,29 @@
+---
+kind_cluster_name: pawprint
+containerd_certs_dir: /etc/containerd/certs.d
+mirror_capabilities:
+  - pull
+  - resolve
+
+# The server is the upstream fallback. Mirrors are attempted first.
+registry_mirrors:
+  - registry: docker.io
+    server: https://registry-1.docker.io
+    mirrors:
+      - https://docker-mirror.liara.ir
+  - registry: quay.io
+    server: https://quay.io
+    mirrors:
+      - https://quay-mirror.liara.ir
+  - registry: ghcr.io
+    server: https://ghcr.io
+    mirrors:
+      - https://ghcr-mirror.liara.ir
+  - registry: registry.k8s.io
+    server: https://registry.k8s.io
+    mirrors:
+      - https://k8s-mirror.liara.ir
+  - registry: mcr.microsoft.com
+    server: https://mcr.microsoft.com
+    mirrors:
+      - https://mcr-mirror.liara.ir

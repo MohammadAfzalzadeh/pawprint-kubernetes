@@ -1,0 +1,55 @@
+---
+- name: Configure containerd registry mirrors in Kind nodes
+  hosts: local
+  gather_facts: false
+  vars_files:
+    - vars.yml
+  tasks:
+    - name: Check local commands
+      ansible.builtin.command:
+        argv: [sh, -c, "command -v kind >/dev/null && command -v docker >/dev/null"]
+      changed_when: false
+
+    - name: Discover Kind node containers
+      ansible.builtin.command:
+        argv: [kind, get, nodes, --name, "{{ kind_cluster_name }}"]
+      register: kind_nodes_result
+      changed_when: false
+
+    - name: Validate cluster, registry names and HTTPS URLs
+      ansible.builtin.assert:
+        that:
+          - kind_nodes_result.stdout_lines | length > 0
+          - kind_cluster_name is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')
+          - item.registry is match('^[A-Za-z0-9][A-Za-z0-9_.:-]*$')
+          - item.server is match('^https://\\S+$')
+          - item.mirrors | length > 0
+          - item.mirrors | select('match', '^https://\\S+$') | list | length == item.mirrors | length
+        fail_msg: "Use registry host names and HTTPS URLs without whitespace."
+      loop: "{{ registry_mirrors }}"
+
+    - name: Validate node names
+      ansible.builtin.assert:
+        that: ["item is match('^[A-Za-z0-9][A-Za-z0-9_.-]*$')"]
+      loop: "{{ kind_nodes_result.stdout_lines }}"
+
+    - name: Write hosts.toml on every Kind node
+      ansible.builtin.shell:
+        cmd: |
+          set -eu
+          node={{ item.0 | quote }}
+          target={{ (containerd_certs_dir ~ '/' ~ item.1.registry ~ '/hosts.toml') | quote }}
+          docker exec "$node" sh -ec 'mkdir -p "$(dirname "$1")"' sh "$target"
+          docker exec -i "$node" sh -ec 'tmp="$1.tmp"; cat > "$tmp"; mv "$tmp" "$1"' sh "$target" <<'HOSTS_TOML'
+          server = "{{ item.1.server }}"
+          {% for mirror in item.1.mirrors %}
+          [host."{{ mirror }}"]
+          capabilities = [{{ mirror_capabilities | map('to_json') | join(', ') }}]
+          {% endfor %}
+          HOSTS_TOML
+      loop: "{{ kind_nodes_result.stdout_lines | product(registry_mirrors) | list }}"
+      changed_when: true
+
+    - name: Summarize configuration
+      ansible.builtin.debug:
+        msg: "Configured {{ registry_mirrors | length }} registries on {{ kind_nodes_result.stdout_lines | length }} nodes in {{ kind_cluster_name }}."
