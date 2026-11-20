@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pawprint
+  namespace: pawprint
+  annotations:
+    nginx.org/ssl-redirect: "false"
+spec:
+  ingressClassName: pawprint-nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/reports
+            pathType: Prefix
+            backend:
+              service:
+                name: reporting
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: petclinic
+                port:
+                  name: http

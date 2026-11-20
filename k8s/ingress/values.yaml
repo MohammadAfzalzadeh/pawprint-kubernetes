@@ -1,0 +1,26 @@
+controller:
+  image:
+    repository: nginx/nginx-ingress
+    tag: "5.8.0"
+    pullPolicy: IfNotPresent
+  ingressClass:
+    name: pawprint-nginx
+  watchNamespace: pawprint
+  enableCustomResources: false
+  allowEmptyIngressHost: true
+  telemetryReporting:
+    enable: false
+  service:
+    type: NodePort
+    externalTrafficPolicy: Cluster
+    httpPort:
+      nodePort: 30080
+    httpsPort:
+      nodePort: 30443
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 300m, memory: 160Mi}
+  config:
+    entries:
+      proxy-connect-timeout: "3s"
+      proxy-read-timeout: "15s"
