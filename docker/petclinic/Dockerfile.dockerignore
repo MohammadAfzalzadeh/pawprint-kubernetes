@@ -1,0 +1,13 @@
+**
+!spring-petclinic/
+!spring-petclinic/pom.xml
+!spring-petclinic/mvnw
+!spring-petclinic/.mvn/
+!spring-petclinic/.mvn/wrapper/
+!spring-petclinic/.mvn/wrapper/maven-wrapper.properties
+!spring-petclinic/src/
+!spring-petclinic/src/**
+**/.env*
+**/*.key
+**/*.pem
+**/*secret*.yaml
