@@ -1,0 +1,41 @@
+# PetClinic application and assignment analysis
+
+Analysis basis: assignment PDF in the workspace and the existing `spring-petclinic` checkout (branch `main`, commit `500158f732419217507c7656904b8e6aa1bcc0d6`). The source checkout was read only.
+
+## Assignment requirements mapped to implementation and evidence
+
+| Requirement in assignment | Why | Planned implementation | Demonstration / evaluation |
+|---|---|---|---|
+| Use official Spring PetClinic; record exact revision and answer Java version, default port, PostgreSQL activation, datasource config, hostname resolution (Part One) | Reproducibility and database wiring | Preserve this checkout and record commit. Java 17; Spring Boot 4.1.0 parent; PostgreSQL profile uses environment-overridable JDBC URL/user/password. Default web port is Spring Boot's 8080 unless overridden. | Show commit, build/run commands, profile/effective env configuration, and Kubernetes Service DNS. |
+| PostgreSQL Primary with persistent data, dedicated DB/app user, initial schema/data, restricted access (Part Two) | Data durability and least privilege | Primary StatefulSet/PVC; database `petclinic`; app role distinct from replication/reporting; initialize from PetClinic PostgreSQL SQL resources; restrict network access to required pods. | PVC bound, restart/data survival, role grants, `pg_hba.conf` and network restrictions. |
+| Streaming hot-standby replica, dedicated replication role, restricted access; document lag and disconnection behavior (Part Three) | Read-only reporting copy | Standby follows primary WAL with dedicated replication account and settings. | `pg_stat_replication`, `pg_stat_wal_receiver`, recovery/read-only state, lag, and a primary insert queried on replica. Explain asynchronous default. |
+| Dockerize app; env DB configuration; non-root where practical; useful health check (Part Four) | Portable artifact | Package outside source repo unless later decided otherwise; env configuration and Kubernetes probes. No Dockerfile exists in checkout. | Build/run image and show health and database connection. |
+| Cluster and app Deployment with at least two replicas, stable image, probes/resources/rollout; spread scheduling (Parts Five/Six) | Service continuity and scheduling | Deployment with 2 replicas, Service, suitable probes, requests/limits, topology spread or anti-affinity across workers. | `kubectl` node/pod status, rollout, placement and resource declarations. |
+| ClusterIP Service and NGINX Ingress; only controller externally exposed; logs enabled (Part Seven) | Stable internal service and controlled edge | ClusterIP app Service and Ingress/controller per assignment decision. | Curl through ingress, inspect resources and controller logs. |
+| Mandatory app HA tests: delete Pod and make one worker unavailable (Part Eight) | Demonstrate replica replacement and node behavior | Exercise replacement and worker unavailability with replicas spread. | Before/after Pod status, placement, rollout and repeated HTTP requests; record delays/capacity limits. |
+| Reporting every 30 seconds: counts for owners, pets, vets, visits and pet-type stats. Queries must use replica; separate datasource/component; normal app remains on primary (Parts 2, 9, 10) | Offload reads without misrouting writes | Separate lightweight Reporting API (or Job/component), dedicated read-only user, replica endpoint. PetClinic uses primary. | Report endpoint and DB-side `pg_stat_activity`/logs show reporting user on replica; insert on primary appears after replay; stop replica and show website remains usable. |
+| Report endpoint handles replica unavailable gracefully; reporting failure must not stop website (Part Ten) | Isolate optional reporting failure | Independent reporting workload with bounded timeout and degraded/error response. | Stop replica; show reporting response and ordinary website availability. |
+| Security: no public database/app Pods, Secrets, least privilege, restricted DB access; NetworkPolicies optional if supported (Part Twelve) | Reduce exposure and credential risk | Internal DB Services; runtime-created Secrets (never populated Secret YAML in Git); separate roles; least privilege and NetworkPolicy where supported. | Inspect Services, RBAC, Secret handling, grants and restrictions; verify no credentials in Git. |
+| Reproducible deliverables/docs including architecture, deployment, config, failure/replication/report evidence, troubleshooting (Parts 13, 17) | Reproducibility and assessment | Manifests/scripts/docs, architecture, pinned versions and observed test evidence. | Follow clean setup instructions and review evidence/troubleshooting. |
+
+### Grading
+
+PDF scoring: application 10, PostgreSQL Primary 10, Docker image 10, cluster/workload 15, two replicas/scheduling 10, Service + NGINX Ingress 10, app HA/failure tests 10, PostgreSQL streaming replication 15, replica reporting 5, security/documentation 5 (100 total). Bonus up to 20: monitoring (+5), GitLab CI/CD (+5), low-downtime deployment (+5), and better PostgreSQL HA investigation (+5). These are evaluation weights, not additional requirements for this analysis.
+
+## PetClinic source findings
+
+- Java requirement: 17 (`pom.xml`, `<java.version>17</java.version>`).
+- Spring Boot parent: 4.1.0; project artifact `4.0.0-SNAPSHOT`.
+- Maven build: Maven Wrapper is present; Java-compatible build command is `./mvnw package` (not run during this analysis).
+- Runtime database dependencies: H2, MySQL Connector/J, PostgreSQL JDBC driver. No Flyway or Liquibase dependency/configuration was found.
+- Default `application.properties` sets `database=h2`, loads `classpath*:db/${database}/schema.sql` and `data.sql`, sets Hibernate `ddl-auto=none`, and disables open-in-view. H2 schema/data are under `db/h2/`.
+- PostgreSQL profile is `application-postgres.properties`, activated with Spring profile `postgres` (for example, `SPRING_PROFILES_ACTIVE=postgres`). It sets `database=postgres`, `spring.sql.init.mode=always`, URL from `POSTGRES_URL` (default `jdbc:postgresql://localhost/petclinic`), username from `POSTGRES_USER` (default `petclinic`), and password from `POSTGRES_PASS` (default `petclinic`). In Kubernetes, use the primary Service DNS in `POSTGRES_URL` and inject credentials from Secret keys. `localhost` is not correct for the database Pod.
+- PostgreSQL SQL resources: `src/main/resources/db/postgres/schema.sql` defines `vets`, `specialties`, `vet_specialties`, `types`, `owners`, `pets`, and `visits`, with indexes and foreign keys. `data.sql` inserts sample records idempotently. The PostgreSQL profile sets SQL initialization mode to always; scripts use `CREATE TABLE IF NOT EXISTS`, conditional inserts, and `ON CONFLICT`. Validate concurrent initialization before scaling: two application replicas can start at once.
+- Configuration is properties-based; no `application.yml` was found. PostgreSQL driver, schema/data, and environment-driven datasource already exist, so basic app-to-primary integration should need configuration only. A reporting endpoint is absent; use a separate reporting service unless source changes are approved later.
+- HTTP default is Spring Boot's 8080; no `server.port` override was found. Actuator dependency exists and `management.endpoints.web.exposure.include=*` is configured, with a comment warning against production use. `/actuator/health` is expected; confirm against the packaged runtime and restrict actuator exposure through deployment configuration where possible.
+- No Dockerfile exists. `docker-compose.yml` is a development example for MySQL/PostgreSQL; its PostgreSQL service publishes host port 5432 and uses example credentials. Do not use it as-is for Kubernetes.
+- Existing entities/schema align on owners, pets, types, vets, specialties, vet_specialties, and visits.
+
+## Application connection path
+
+PetClinic uses Spring Data JPA/Hibernate and Spring datasource properties. In the `postgres` profile it connects to `POSTGRES_URL` with `POSTGRES_USER`/`POSTGRES_PASS`. In Kubernetes set the URL to the internal primary Service, for example `jdbc:postgresql://postgres-primary.<namespace>.svc.cluster.local:5432/petclinic`. The reporting component needs an independent datasource to the replica and a read-only role.
