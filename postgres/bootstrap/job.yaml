@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: petclinic-schema-bootstrap-v3
+  namespace: pawprint
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: petclinic-schema-bootstrap
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: bootstrap
+          image: postgres:18.6-trixie
+          imagePullPolicy: IfNotPresent
+          command: ["bash", "-euc"]
+          args:
+            - |
+              export PGPASSWORD="$ADMIN_PASSWORD" PGCONNECT_TIMEOUT=5
+              exec psql -X -v ON_ERROR_STOP=1 --single-transaction -h postgres-primary -U postgres -d petclinic -f /sql/bootstrap.sql
+          env:
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-primary-auth
+                  key: postgres_password
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 96Mi}
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+      volumes:
+        - name: sql
+          configMap:
+            name: petclinic-schema
+            items:
+              - key: bootstrap.sql
+                path: bootstrap.sql
+              - key: schema.sql
+                path: schema.sql
+              - key: data.sql
+                path: data.sql
+              - key: reporting.sql
+                path: reporting.sql

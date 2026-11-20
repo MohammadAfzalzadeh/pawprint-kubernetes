@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-replica-config
+  namespace: pawprint
+data:
+  postgresql.conf: |
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 50
+    password_encryption = 'scram-sha-256'
+    hot_standby = on
+    shared_buffers = '64MB'
+    wal_level = replica
+    max_wal_senders = 5
+    max_replication_slots = 5
+    hba_file = '/etc/postgresql/pg_hba.conf'
+  pg_hba.conf: |
+    local   all             postgres                                peer
+    host    petclinic       reporting_user  10.244.0.0/16            scram-sha-256

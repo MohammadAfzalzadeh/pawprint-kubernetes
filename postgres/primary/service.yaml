@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary
+  namespace: pawprint
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: postgres-primary
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: postgres-primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary-peer
+  namespace: pawprint
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: postgres-primary
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: postgres-primary
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

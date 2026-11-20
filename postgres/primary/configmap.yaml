@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-primary-config
+  namespace: pawprint
+data:
+  postgresql.conf: |
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 50
+    password_encryption = 'scram-sha-256'
+    work_mem = '4MB'
+    maintenance_work_mem = '64MB'
+    checkpoint_timeout = '10min'
+    wal_level = replica
+    max_wal_senders = 5
+    max_replication_slots = 5
+    wal_keep_size = '256MB'
+    shared_buffers = '64MB'
+    hba_file = '/etc/postgresql/pg_hba.conf'
+  pg_hba.conf: |
+    # Unix socket for image initialization and in-container administration.
+    local   all             postgres                                peer
+    # Require SCRAM for cluster pod connections; Pod CIDRs observed on pawprint.
+    host    petclinic       petclinic_app,postgres 10.244.0.0/16     scram-sha-256
+    host    replication     replicator      10.244.0.0/16            scram-sha-256
+  10-create-roles.sh: |
+    #!/usr/bin/env bash
+    set -Eeuo pipefail
+
+    psql -X --set=ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<'SQL'
+    \getenv app_password PETCLINIC_APP_PASSWORD
+    \getenv replication_password REPLICATION_PASSWORD
+    \getenv reporting_password REPORTING_PASSWORD
+    SET log_statement = 'none';
+    SET log_min_error_statement = 'panic';
+    CREATE ROLE petclinic_owner NOLOGIN;
+    CREATE ROLE petclinic_app LOGIN CONNECTION LIMIT 12 PASSWORD :'app_password';
+    CREATE ROLE replicator LOGIN REPLICATION CONNECTION LIMIT 5 PASSWORD :'replication_password';
+    CREATE ROLE reporting_user LOGIN CONNECTION LIMIT 4 PASSWORD :'reporting_password';
+    CREATE DATABASE petclinic OWNER petclinic_owner;
+    ALTER ROLE reporting_user SET default_transaction_read_only = on;
+    ALTER ROLE reporting_user SET statement_timeout = '3s';
+    REVOKE ALL ON DATABASE petclinic FROM PUBLIC;
+    GRANT CONNECT ON DATABASE petclinic TO petclinic_app, reporting_user;
+    \connect petclinic
+    REVOKE ALL ON SCHEMA public FROM PUBLIC;
+    GRANT USAGE ON SCHEMA public TO petclinic_app, reporting_user;
+    ALTER DEFAULT PRIVILEGES FOR ROLE petclinic_owner IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO petclinic_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE petclinic_owner IN SCHEMA public
+      GRANT USAGE, SELECT ON SEQUENCES TO petclinic_app;
+    ALTER DEFAULT PRIVILEGES FOR ROLE petclinic_owner IN SCHEMA public
+      GRANT SELECT ON TABLES TO reporting_user;
+    SQL
