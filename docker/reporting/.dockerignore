@@ -1,0 +1,5 @@
+**
+!reporting/
+!reporting/requirements.txt
+!reporting/source/
+!reporting/source/server.py

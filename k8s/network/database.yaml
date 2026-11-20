@@ -1,0 +1,73 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-primary-ingress
+  namespace: pawprint
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: postgres-primary
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values: [petclinic, petclinic-schema-bootstrap, petclinic-backup]
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: postgres-replica
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-replica-ingress
+  namespace: pawprint
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: postgres-replica
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: reporting
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: reporting-egress
+  namespace: pawprint
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: reporting
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: postgres-replica
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
