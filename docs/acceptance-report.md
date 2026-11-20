@@ -11,6 +11,7 @@ Verified against the existing `kind-pawprint` context on 2026-11-19. All three n
 | PetClinic image builds | PASS | Maven Wrapper 3.9.16 ended with BUILD SUCCESS and packaged the Spring Boot 4.1.0 JAR with Java 17. |
 | PetClinic runs directly on the host | PASS | On 2026-11-20, Java 17 ran the Maven-built JAR with H2 on `127.0.0.1:18081`. The homepage rendered and returned HTTP 200. [Host run evidence](standalone-petclinic.md#build-with-maven-and-run-on-the-host) |
 | Image loaded into all Kind nodes | PASS | All three CRI stores reported image ID prefix `f6666d2c35bc3`. |
+| Publish and deploy registry images | PASS | GitHub Actions pushed fixed tags for PetClinic and Reporting. Both workers pulled both GHCR digests and both Deployments reached Ready. [GHCR release evidence](ghcr-deployment.md#verified-release-on-2026-11-20) |
 | Two PetClinic replicas Ready | PASS | Deployment 2/2; Pods on `pawprint-worker` and `pawprint-worker2`. |
 | PetClinic resources measured per Pod | PASS | On 2026-11-20, both replicas were sampled at baseline and during 286 successful GET requests. The measured working set peaked at `308.01Mi`, informing the `336Mi` request. [Measurements and rollout evidence](deployment-guide.md#petclinic-resource-sizing) |
 | Service routes traffic | PASS | EndpointSlice lists both Pods on TCP 8080. Homepage, vet list and owner details returned 200 through the Service. |
@@ -71,7 +72,7 @@ Verified against the existing `kind-pawprint` context on 2026-11-19. All three n
 
 ## Image inventory
 
-All four workload images were verified on the control plane and both workers as linux/amd64.
+All four local-demo workload images were verified on the control plane and both workers as linux/amd64. The later GHCR application release and its deployed digests are recorded separately in the [GHCR release evidence](ghcr-deployment.md#verified-release-on-2026-11-20).
 
 | Image | Image ID or registry index |
 | --- | --- |

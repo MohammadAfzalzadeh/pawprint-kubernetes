@@ -67,3 +67,32 @@ curl -fsS http://localhost:8080/api/reports/summary
 PetClinic rolls forward one Pod at a time using its existing surge and readiness settings. Reporting has one replica and may be briefly unavailable during its rollout. For rollback to a previously published version, repeat the worker check and deploy using its saved `release.json`. To return to locally loaded images, follow the [local build and load steps](deployment-guide.md#build-load-and-deploy) and deploy both stages with `IMAGE_SOURCE=local`.
 
 For `ImagePullBackOff`, describe the affected Pod and inspect its Events for authorization, DNS, timeouts or a missing digest. If Kind's optional GHCR mirror is configured, treat the worker probe as proof that the worker resolved a GHCR image reference through its configured registry route. Verify the actual endpoint separately if the evidence needs to distinguish direct GHCR from mirror traffic. [PawPrint registry mirrors](image-registry-mirrors.md)
+
+## Verified release on 2026-11-20
+
+GitHub Actions built both images, passed both HTTP smoke checks, pushed both tagged images, and uploaded `ghcr-release`. The published tag for each image was `sha-c984634e202957071d9439723ac30d97db1c8f42-44779128531-1`. [GitHub Actions run 44779128531](https://github.com/MohammadAfzalzadeh/pawprint-kubernetes/actions/runs/44779128531)
+
+```text
+ghcr.io/mohammadafzalzadeh/pawprint-kubernetes-petclinic@sha256:0a94cdce2f652a8ae6e1dd60342b6f419ca6403ec596080813ef20207fee1a4a
+ghcr.io/mohammadafzalzadeh/pawprint-kubernetes-reporting@sha256:05e1fa332aed008e46acf695f3cf15934d96fe6533462dfddad214ceebdac3aa
+```
+
+`make verify-ghcr-pulls` finished successfully with no `imagePullSecret`. All four probes emitted `Successfully pulled image`, and each runtime image ID matched the requested digest.
+
+| Kind node | Image | Probe Pod | Successful pull duration |
+| --- | --- | --- | ---: |
+| `pawprint-worker` | PetClinic | `ghcr-pull-petclinic-bbf7t` | 24.686 s |
+| `pawprint-worker` | Reporting | `ghcr-pull-reporting-fxwmw` | 4.984 s |
+| `pawprint-worker2` | PetClinic | `ghcr-pull-petclinic-4fwz2` | 18.340 s |
+| `pawprint-worker2` | Reporting | `ghcr-pull-reporting-nwd7v` | 4.809 s |
+
+The first PetClinic pull attempt on `pawprint-worker2` timed out while downloading a blob. Kubernetes retried the same digest successfully. The table records the successful `Pulled` event durations. The local transcript is `.pawprint/ghcr/worker-pulls.log`.
+
+Both Deployments rolled out those digests on `kind-pawprint`. PetClinic reached 2/2 Ready with one Pod on each worker. Reporting reached 1/1 Ready. PostgreSQL Primary and Replica Pod UIDs and all PVC UIDs and volume bindings matched before and after.
+
+| Endpoint | Before rollout | During rollout | After rollout |
+| --- | --- | --- | --- |
+| PetClinic `/` | 3 × HTTP 200 | 59 × HTTP 200 | 4 × HTTP 200 |
+| Reporting `/api/reports/summary` | 3 × HTTP 200 | 55 × HTTP 200, 6 × HTTP 502 | 5 × HTTP 200 |
+
+Reporting returned 502s while its single replica was being replaced. `make verify` passed after the rollout. PostgreSQL was streaming, the report matched the Replica query, and Reporting could reach the Replica while the Primary was blocked by network policy. The deploy and verification transcripts are `.pawprint/ghcr/rollout.log` and `.pawprint/ghcr/verify.log`.
