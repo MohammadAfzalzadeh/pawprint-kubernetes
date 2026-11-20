@@ -1,4 +1,4 @@
-.PHONY: preflight build load secrets deploy verify backup restore restore-live restore-live-preflight rollback-live report test test-bootstrap test-failures
+.PHONY: preflight build load secrets ghcr-secret verify-ghcr-pulls deploy verify backup restore restore-live restore-live-preflight rollback-live report test test-bootstrap test-failures
 preflight:
 	bash scripts/preflight.sh
 build:
@@ -7,6 +7,10 @@ load:
 	bash scripts/load-images.sh
 secrets:
 	bash scripts/setup-secrets.sh
+ghcr-secret:
+	bash scripts/setup-ghcr-secret.sh
+verify-ghcr-pulls:
+	bash scripts/verify-ghcr-pulls.sh
 deploy:
 	bash scripts/deploy.sh $(STAGES)
 verify:

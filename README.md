@@ -25,6 +25,8 @@ See [architecture and Pod placement](docs/architecture.md) for storage and sched
 
 Starting without a cluster? Follow the [deployment and test guide](docs/deployment-guide.md) to create the cluster, deploy PawPrint, and run the acceptance tests. See the [acceptance report](docs/acceptance-report.md) for results.
 
+GitHub Actions publishes PetClinic and Reporting to GitHub Container Registry. The [GHCR deployment guide](docs/ghcr-deployment.md) covers release digests, private package credentials, worker pull evidence, and deployment to Kind.
+
 To run PetClinic independently, see the [Maven and Docker smoke tests](docs/standalone-petclinic.md) for commands, HTTP results and screenshots.
 
 ```bash

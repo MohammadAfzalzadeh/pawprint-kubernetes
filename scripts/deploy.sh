@@ -2,7 +2,13 @@
 set -euo pipefail
 source "$(dirname -- "$0")/common.sh"
 source scripts/database-operations.sh
+source scripts/ghcr.sh
 check_cluster
+case "${IMAGE_SOURCE:-local}" in
+  local) ;;
+  ghcr) check_ghcr_release ;;
+  *) echo 'IMAGE_SOURCE must be local or ghcr.' >&2; exit 2 ;;
+esac
 recovery_idle
 k get storageclass standard
 k apply -f k8s/namespace.yaml
@@ -17,6 +23,15 @@ confirmed_image() {
   for node in $("$KIND_BIN" get nodes --name pawprint); do
     docker exec "$node" crictl inspecti "$1" >/dev/null
   done
+}
+apply_ghcr_application() {
+  local component=$1 rendered path="k8s/$1"
+  shift
+  rendered=$(ns create --dry-run=client --validate=false -f "$path/deployment.yaml" -o json |
+    python3 scripts/ghcr_release.py render "$GHCR_RELEASE" "${GHCR_PULL_SECRET:-}" "$component")
+  printf '%s\n' "$rendered" | k apply --dry-run=server --validate=strict \
+    -f "$path/configmap.yaml" -f "$path/service.yaml" "$@" -f - >/dev/null
+  printf '%s\n' "$rendered" | k apply -f "$path/configmap.yaml" -f "$path/service.yaml" "$@" -f -
 }
 secrets() {
   ns get secret postgres-primary-auth -o go-template='{{range $key, $ignored := .data}}{{println $key}}{{end}}' |
@@ -66,14 +81,22 @@ stage() {
       ;;
     reporting)
       rollout "statefulset/$(db_set replica)"
-      confirmed_image pawprint/reporting:1.0.0
-      apply -f k8s/reporting
+      if [[ "${IMAGE_SOURCE:-local}" == ghcr ]]; then
+        apply_ghcr_application reporting
+      else
+        confirmed_image pawprint/reporting:1.0.0
+        apply -f k8s/reporting
+      fi
       rollout deployment/reporting
       ;;
     petclinic)
       verify_bootstrap_objects
-      confirmed_image "pawprint/petclinic:$(git -C spring-petclinic rev-parse --short=12 HEAD)"
-      apply -f k8s/petclinic -f k8s/policies/petclinic-pdb.yaml
+      if [[ "${IMAGE_SOURCE:-local}" == ghcr ]]; then
+        apply_ghcr_application petclinic -f k8s/policies/petclinic-pdb.yaml
+      else
+        confirmed_image "pawprint/petclinic:$(git -C spring-petclinic rev-parse --short=12 HEAD)"
+        apply -f k8s/petclinic -f k8s/policies/petclinic-pdb.yaml
+      fi
       rollout deployment/petclinic
       ;;
     ingress)

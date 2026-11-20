@@ -38,6 +38,8 @@ make preflight
 
 ## Build, load, and deploy
 
+To deploy the published PetClinic and Reporting images, follow the [GHCR deployment guide](ghcr-deployment.md) after the `primary bootstrap replica` stages. The Docker build and Kind load commands for those two applications are for local images.
+
 Run these commands in order and stop at the first failure. `make secrets` prompts for four database passwords and preserves an existing Secret. It creates `pawprint/postgres-primary-auth` on a fresh cluster. The [placeholder Secret](../k8s/secret.example.yaml) records the six keys and uses a separate example name. On a host under memory pressure, use the staged commands below to build and roll out one component at a time.
 
 ```bash

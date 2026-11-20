@@ -1,0 +1,108 @@
+name: Build and publish PawPrint images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_TAG: sha-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out PawPrint
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Check out pinned Spring PetClinic
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: spring-projects/spring-petclinic
+          ref: 500158f732419217507c7656904b8e6aa1bcc0d6
+          path: spring-petclinic
+          persist-credentials: false
+
+      - name: Validate scripts
+        run: |
+          for script in scripts/*.sh postgres/backup/*.sh postgres/bootstrap/*.sh; do
+            bash -n "$script" || exit 1
+          done
+          python3 -m unittest discover -s tests
+
+      - name: Build the images
+        run: |
+          prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          source_label="org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          revision_label="org.opencontainers.image.revision=$GITHUB_SHA"
+
+          docker build --platform linux/amd64 --pull \
+            --build-arg BUILD_BASE=docker.io/library/eclipse-temurin:17-jdk-jammy@sha256:76751c16a2a07ec0960e659a2603491f8c79d95592173f6c0df8bf8ebab257cc \
+            --build-arg RUN_BASE=docker.io/library/eclipse-temurin:17-jre-jammy@sha256:aa6381384f8db99762fa7d0d3c2b5de58874e5f12c96df4c13a1455376ae0ed1 \
+            --label "$source_label" --label "$revision_label" \
+            -f docker/petclinic/Dockerfile -t "$prefix-petclinic:$IMAGE_TAG" .
+
+          docker build --platform linux/amd64 --pull \
+            --build-arg RUN_BASE=docker.io/library/python:3.13-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72 \
+            --label "$source_label" --label "$revision_label" \
+            -f docker/reporting/Dockerfile -t "$prefix-reporting:$IMAGE_TAG" .
+
+      - name: Smoke test before publishing
+        run: |
+          prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          trap 'docker rm -f pawprint-ci-petclinic pawprint-ci-reporting >/dev/null 2>&1 || true' EXIT
+          docker run -d --name pawprint-ci-petclinic -p 127.0.0.1:18081:8080 "$prefix-petclinic:$IMAGE_TAG"
+          docker run -d --name pawprint-ci-reporting -p 127.0.0.1:18082:8080 \
+            -e REPORT_DB_HOST=127.0.0.1 -e REPORT_DB_PASSWORD=pawprint-ci-smoke "$prefix-reporting:$IMAGE_TAG"
+          if ! curl -fsS --retry 24 --retry-all-errors --retry-delay 2 --max-time 3 -o /dev/null \
+                 -w 'PetClinic HTTP %{http_code}\n' http://127.0.0.1:18081/ ||
+             ! curl -fsS --retry 24 --retry-all-errors --retry-delay 2 --max-time 3 -o /dev/null \
+                 -w 'Reporting HTTP %{http_code}\n' http://127.0.0.1:18082/healthz; then
+            docker logs pawprint-ci-petclinic
+            docker logs pawprint-ci-reporting
+            exit 1
+          fi
+
+      - name: Publish to GHCR and record digests
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export DOCKER_CONFIG
+          DOCKER_CONFIG=$(mktemp -d)
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf -- "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          for component in petclinic reporting; do
+            repository="$prefix-$component"
+            tagged="$repository:$IMAGE_TAG"
+            docker push "$tagged" | tee "$RUNNER_TEMP/$component-push.log"
+            digest=$(awk '$2=="digest:" {print $3}' "$RUNNER_TEMP/$component-push.log")
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            printf '%s@%s\n' "$repository" "$digest" > "$RUNNER_TEMP/$component.ref"
+            printf -- '- `%s` → `%s@%s`\n' "$tagged" "$repository" "$digest" >> "$GITHUB_STEP_SUMMARY"
+          done
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          images = {name: (temp / f"{name}.ref").read_text().strip() for name in ("petclinic", "reporting")}
+          Path("release.json").write_text(json.dumps({"commit": os.environ["GITHUB_SHA"], "images": images}, indent=2) + "\n")
+          PY
+
+      - name: Upload Kubernetes release references
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ghcr-release
+          path: release.json
+          if-no-files-found: error
