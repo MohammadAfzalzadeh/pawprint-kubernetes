@@ -55,6 +55,11 @@ pg_restore --exit-on-error --use-list="$staging/sequence.toc" --file=- "$archive
 )
 [[ ! -e "$final" ]]
 mv -T -- "$staging" "$final"
+# The read-only monitoring collector runs as GID 10001. Keep archives private
+# from other users while allowing that group to verify checksums and size.
+chgrp -R 10001 "$final"
+find "$final" -type d -exec chmod 0750 {} +
+find "$final" -type f -exec chmod 0640 {} +
 printf 'BACKUP_ID=%s\n' "$backup_id"
 stat --format='archive=%n bytes=%s' "$final/petclinic.dump"
 cat "$final/SHA256SUMS"

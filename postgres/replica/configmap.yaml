@@ -18,3 +18,5 @@ data:
   pg_hba.conf: |
     local   all             postgres                                peer
     host    petclinic       reporting_user  10.244.0.0/16            scram-sha-256
+    host    petclinic       monitoring_user 10.244.0.0/16            scram-sha-256
+    host    postgres        monitoring_user 10.244.0.0/16            scram-sha-256

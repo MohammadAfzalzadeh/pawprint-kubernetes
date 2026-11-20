@@ -1,0 +1,114 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-prometheus
+spec:
+  selector: {app.kubernetes.io/name: pawprint-prometheus}
+  ports:
+    - {name: http, port: 9090, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-grafana
+spec:
+  selector: {app.kubernetes.io/name: pawprint-grafana}
+  ports:
+    - {name: http, port: 3000, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-alertmanager
+spec:
+  selector: {app.kubernetes.io/name: pawprint-alertmanager}
+  ports:
+    - {name: http, port: 9093, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-blackbox
+spec:
+  selector: {app.kubernetes.io/name: pawprint-blackbox}
+  ports:
+    - {name: http, port: 9115, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-kube-state-metrics
+spec:
+  selector: {app.kubernetes.io/name: pawprint-kube-state-metrics}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-node-exporter
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: pawprint-node-exporter}
+  ports:
+    - {name: metrics, port: 9100, targetPort: metrics}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-observer
+spec:
+  selector: {app.kubernetes.io/name: pawprint-observer}
+  ports:
+    - {name: metrics, port: 9108, targetPort: metrics}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-nginx-metrics
+spec:
+  selector:
+    app.kubernetes.io/instance: pawprint-nginx
+    app.kubernetes.io/name: nginx-ingress
+  ports:
+    - {name: metrics, port: 9113, targetPort: 9113}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pawprint-monitoring
+  annotations:
+    nginx.org/ssl-redirect: "false"
+    nginx.org/basic-auth-secret: pawprint-monitoring-ingress-auth
+    nginx.org/basic-auth-realm: PawPrint monitoring
+spec:
+  ingressClassName: pawprint-nginx
+  rules:
+    - host: prometheus.pawprint.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: pawprint-prometheus, port: {name: http}}}
+    - host: alertmanager.pawprint.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: pawprint-alertmanager, port: {name: http}}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pawprint-grafana
+  annotations:
+    nginx.org/ssl-redirect: "false"
+spec:
+  ingressClassName: pawprint-nginx
+  rules:
+    - host: grafana.pawprint.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: pawprint-grafana, port: {name: http}}}

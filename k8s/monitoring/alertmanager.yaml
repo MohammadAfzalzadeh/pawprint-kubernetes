@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawprint-alertmanager
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-alertmanager}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-alertmanager}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, fsGroup: 65534, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: alertmanager
+          image: docker-mirror.liara.ir/prom/alertmanager:v0.29.0
+          args: ['--config.file=/etc/alertmanager/alertmanager.yml', '--storage.path=/alertmanager', '--data.retention=120h']
+          ports: [{name: http, containerPort: 9093}]
+          readinessProbe: {httpGet: {path: /-/ready, port: http}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /-/healthy, port: http}, periodSeconds: 20}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 150m, memory: 96Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/alertmanager, readOnly: true}
+            - {name: data, mountPath: /alertmanager}
+      volumes:
+        - {name: config, configMap: {name: pawprint-alertmanager}}
+        - {name: data, persistentVolumeClaim: {claimName: alertmanager-data}}

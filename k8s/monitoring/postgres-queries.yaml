@@ -1,0 +1,50 @@
+pawprint_postgres_role:
+  query: |
+    SELECT pg_is_in_recovery()::int AS is_in_recovery,
+           current_setting('transaction_read_only')::bool::int AS read_only
+  metrics:
+    - is_in_recovery: {usage: GAUGE, description: "One when PostgreSQL is a standby"}
+    - read_only: {usage: GAUGE, description: "One when the current connection is read only"}
+pawprint_replication:
+  query: |
+    SELECT CASE WHEN pg_is_in_recovery() THEN
+             COALESCE((SELECT (status = 'streaming')::int FROM pg_stat_wal_receiver LIMIT 1), 0)
+           ELSE COALESCE((SELECT bool_or(state = 'streaming')::int FROM pg_stat_replication), 0)
+           END AS streaming,
+           CASE WHEN pg_is_in_recovery() THEN
+             COALESCE(pg_wal_lsn_diff(pg_last_wal_receive_lsn(), pg_last_wal_replay_lsn()), 0)
+           ELSE COALESCE((SELECT max(pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn)) FROM pg_stat_replication), 0)
+           END AS lag_bytes,
+           CASE WHEN pg_is_in_recovery() THEN
+             COALESCE(EXTRACT(EPOCH FROM clock_timestamp() - pg_last_xact_replay_timestamp()), 0)
+           ELSE 0 END AS replay_age_seconds,
+           CASE WHEN pg_is_in_recovery() THEN
+             COALESCE((SELECT EXTRACT(EPOCH FROM clock_timestamp() - last_msg_receipt_time) FROM pg_stat_wal_receiver LIMIT 1), 0)
+           ELSE 0 END AS last_message_age_seconds,
+           CASE WHEN pg_is_in_recovery() THEN
+             COALESCE(pg_wal_lsn_diff(pg_last_wal_receive_lsn(), '0/0'), 0)
+           ELSE pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0') END AS received_lsn_bytes,
+           CASE WHEN pg_is_in_recovery() THEN
+             COALESCE(pg_wal_lsn_diff(pg_last_wal_replay_lsn(), '0/0'), 0)
+           ELSE pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0') END AS replayed_lsn_bytes
+  metrics:
+    - streaming: {usage: GAUGE, description: "One when the replication stream is active"}
+    - lag_bytes: {usage: GAUGE, description: "WAL bytes not yet replayed"}
+    - replay_age_seconds: {usage: GAUGE, description: "Age of last replayed transaction; can grow while idle"}
+    - last_message_age_seconds: {usage: GAUGE, description: "Age of last WAL receiver message"}
+    - received_lsn_bytes: {usage: GAUGE, description: "Absolute received/current WAL LSN expressed as bytes for rate calculations"}
+    - replayed_lsn_bytes: {usage: GAUGE, description: "Absolute replayed/current WAL LSN expressed as bytes for rate calculations"}
+pawprint_checkpointer:
+  query: |
+    SELECT num_timed, num_requested, restartpoints_timed, restartpoints_req,
+           restartpoints_done, write_time, sync_time, buffers_written
+    FROM pg_stat_checkpointer
+  metrics:
+    - num_timed: {usage: COUNTER, description: "Scheduled checkpoints completed"}
+    - num_requested: {usage: COUNTER, description: "Requested checkpoints completed"}
+    - restartpoints_timed: {usage: COUNTER, description: "Scheduled restartpoints on standby"}
+    - restartpoints_req: {usage: COUNTER, description: "Requested restartpoints on standby"}
+    - restartpoints_done: {usage: COUNTER, description: "Restartpoints completed on standby"}
+    - write_time: {usage: COUNTER, description: "Checkpoint/restartpoint write time in milliseconds"}
+    - sync_time: {usage: COUNTER, description: "Checkpoint/restartpoint sync time in milliseconds"}
+    - buffers_written: {usage: COUNTER, description: "Buffers written by checkpoints/restartpoints"}

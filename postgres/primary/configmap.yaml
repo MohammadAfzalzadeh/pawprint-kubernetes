@@ -23,6 +23,8 @@ data:
     local   all             postgres                                peer
     # Require SCRAM for cluster pod connections; Pod CIDRs observed on pawprint.
     host    petclinic       petclinic_app,postgres 10.244.0.0/16     scram-sha-256
+    host    petclinic       monitoring_user 10.244.0.0/16            scram-sha-256
+    host    postgres        monitoring_user 10.244.0.0/16            scram-sha-256
     host    replication     replicator      10.244.0.0/16            scram-sha-256
   10-create-roles.sh: |
     #!/usr/bin/env bash

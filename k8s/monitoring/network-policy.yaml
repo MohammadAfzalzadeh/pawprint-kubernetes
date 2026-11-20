@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pawprint-monitoring
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [pawprint-prometheus, pawprint-alertmanager, pawprint-grafana, pawprint-blackbox, pawprint-kube-state-metrics, pawprint-node-exporter, pawprint-postgres-exporter, pawprint-observer, pawprint-pvc-usage]
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {}}]
+  egress:
+    - to: [{podSelector: {}}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to: [{ipBlock: {cidr: 10.96.0.1/32}}]
+      ports: [{protocol: TCP, port: 443}]
+    - to: [{ipBlock: {cidr: 192.168.240.0/20}}]
+      ports: [{protocol: TCP, port: 10250}]
+    - to: [{ipBlock: {cidr: 192.168.240.2/32}}]
+      ports: [{protocol: TCP, port: 6443}]

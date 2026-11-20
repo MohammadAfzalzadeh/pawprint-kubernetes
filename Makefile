@@ -1,4 +1,4 @@
-.PHONY: preflight build load secrets ghcr-secret verify-ghcr-pulls deploy verify backup restore restore-live restore-live-preflight rollback-live report test test-bootstrap test-failures
+.PHONY: preflight build load secrets ghcr-secret verify-ghcr-pulls deploy verify backup restore restore-live restore-live-preflight rollback-live report test test-bootstrap test-failures monitoring deploy-monitoring verify-monitoring monitoring-ui monitoring-status monitoring-logs
 preflight:
 	bash scripts/preflight.sh
 build:
@@ -34,6 +34,16 @@ rollback-live:
 	python3 scripts/live-recovery.py rollback "$${RECOVERY_OPERATION_ID:-}"
 report:
 	bash scripts/verify-reporting.sh
+monitoring deploy-monitoring:
+	bash scripts/monitoring.sh deploy
+verify-monitoring:
+	bash scripts/monitoring.sh verify
+monitoring-ui:
+	bash scripts/monitoring.sh ui
+monitoring-status:
+	bash scripts/monitoring.sh status
+monitoring-logs:
+	bash scripts/monitoring-logs.sh
 test: verify test-bootstrap
 
 test-bootstrap:

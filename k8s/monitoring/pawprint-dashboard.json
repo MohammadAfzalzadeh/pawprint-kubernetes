@@ -1,0 +1,8 @@
+{
+  "uid":"pawprint-health","title":"PawPrint HTTP Health","description":"Compact presentation view of real PetClinic and Reporting probes through NGINX Ingress.","schemaVersion":42,"version":2,"editable":false,"refresh":"15s","time":{"from":"now-30m","to":"now"},
+  "panels":[
+    {"id":1,"type":"timeseries","title":"Availability (1 healthy)","gridPos":{"x":0,"y":0,"w":12,"h":8},"targets":[{"expr":"probe_success{job=\"pawprint-http\"}","legendFormat":"{{app}}"}],"fieldConfig":{"defaults":{"min":0,"max":1,"decimals":0,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}}}},
+    {"id":2,"type":"timeseries","title":"Observed HTTP status","description":"2xx=green, 3xx=yellow, 4xx=orange, 5xx=red.","gridPos":{"x":12,"y":0,"w":12,"h":8},"targets":[{"expr":"probe_http_status_code{job=\"pawprint-http\"}","legendFormat":"{{app}}"}],"fieldConfig":{"defaults":{"decimals":0,"min":0,"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":200},{"color":"yellow","value":300},{"color":"orange","value":400},{"color":"red","value":500}]}}}},
+    {"id":3,"type":"timeseries","title":"Synthetic response latency","description":"Blackbox end-to-end latency through NGINX; this is not NGINX upstream latency.","gridPos":{"x":0,"y":8,"w":24,"h":9},"targets":[{"expr":"probe_duration_seconds{job=\"pawprint-http\"}","legendFormat":"{{app}}"}],"fieldConfig":{"defaults":{"unit":"s","min":0}}}
+  ]
+}

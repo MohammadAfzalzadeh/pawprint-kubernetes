@@ -1,0 +1,17 @@
+modules:
+  http_200:
+    prober: http
+    timeout: 5s
+    http: {valid_status_codes: [200], follow_redirects: false, preferred_ip_protocol: ip4}
+  grafana_ingress:
+    prober: http
+    timeout: 5s
+    http: {valid_status_codes: [200, 302], follow_redirects: false, preferred_ip_protocol: ip4, headers: {Host: grafana.pawprint.local}}
+  prometheus_ingress:
+    prober: http
+    timeout: 5s
+    http: {valid_status_codes: [401], follow_redirects: false, preferred_ip_protocol: ip4, headers: {Host: prometheus.pawprint.local}}
+  alertmanager_ingress:
+    prober: http
+    timeout: 5s
+    http: {valid_status_codes: [401], follow_redirects: false, preferred_ip_protocol: ip4, headers: {Host: alertmanager.pawprint.local}}

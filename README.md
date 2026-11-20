@@ -54,7 +54,7 @@ For a different release, set `GHCR_RELEASE` to the `release.json` from a success
 
 Keep the PostgreSQL port internal. The browser entry point is `http://localhost:8080/` and the report endpoint is `http://localhost:8080/api/reports/summary`. Run `make test` for live verification and disposable bootstrap tests. See [failure testing](docs/failure-testing.md) before running `make test-failures`.
 
-For the monitoring demo, run `make monitoring` after Ingress is ready, then open Grafana with `make monitoring-ui`. [Monitoring and verification](docs/monitoring.md)
+For the monitoring demo, run `make deploy-monitoring` after Ingress and backup are ready, then `make verify-monitoring`. `make monitoring-ui` prints the authenticated Ingress URLs and `/etc/hosts` entry; it does not start a port-forward. The platform includes persistent Prometheus/Grafana/Alertmanager, Kubernetes and node exporters, least-privilege PostgreSQL monitoring, actual local-path PVC usage, backup/restore evidence, 28 alert rules and 12 provisioned dashboards. Use `make monitoring-logs` for bounded, read-only workload logs; Loki is intentionally omitted while host storage is under pressure. [Monitoring architecture, access, SLOs and verification](docs/monitoring.md)
 
 `make restore` verifies a backup in a temporary database. For an operator-confirmed cutover to a recovered database, see the [live recovery runbook](docs/live-recovery.md).
 

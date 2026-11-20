@@ -1,0 +1,76 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 8s
+  evaluation_interval: 15s
+rule_files: [/etc/prometheus/rules/*.yml]
+alerting:
+  alertmanagers:
+    - static_configs: [{targets: [pawprint-alertmanager:9093]}]
+scrape_configs:
+  - job_name: prometheus
+    static_configs: [{targets: [localhost:9090]}]
+  - job_name: alertmanager
+    static_configs: [{targets: [pawprint-alertmanager:9093]}]
+  - job_name: kube-state-metrics
+    static_configs: [{targets: [pawprint-kube-state-metrics:8080]}]
+  - job_name: node-exporter
+    kubernetes_sd_configs: [{role: pod}]
+    relabel_configs:
+      - {source_labels: [__meta_kubernetes_namespace], regex: pawprint, action: keep}
+      - {source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name], regex: pawprint-node-exporter, action: keep}
+      - {source_labels: [__meta_kubernetes_pod_container_port_name], regex: metrics, action: keep}
+      - {source_labels: [__meta_kubernetes_pod_node_name], target_label: node}
+  - job_name: kubelet
+    scheme: https
+    authorization: {credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token}
+    tls_config: {insecure_skip_verify: true}
+    kubernetes_sd_configs: [{role: node}]
+    relabel_configs: [{source_labels: [__meta_kubernetes_node_name], target_label: node}]
+  - job_name: cadvisor
+    scheme: https
+    metrics_path: /metrics/cadvisor
+    authorization: {credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token}
+    tls_config: {insecure_skip_verify: true}
+    kubernetes_sd_configs: [{role: node}]
+    relabel_configs: [{source_labels: [__meta_kubernetes_node_name], target_label: node}]
+  - job_name: postgres-primary
+    static_configs: [{targets: [pawprint-postgres-primary-exporter:9187], labels: {role: primary}}]
+  - job_name: postgres-replica
+    static_configs: [{targets: [pawprint-postgres-replica-exporter:9187], labels: {role: replica}}]
+  - job_name: pawprint-observer
+    static_configs: [{targets: [pawprint-observer:9108]}]
+  - job_name: pawprint-pvc-usage
+    kubernetes_sd_configs: [{role: pod}]
+    relabel_configs:
+      - {source_labels: [__meta_kubernetes_namespace], regex: pawprint, action: keep}
+      - {source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name], regex: pawprint-pvc-usage, action: keep}
+      - {source_labels: [__meta_kubernetes_pod_container_port_name], regex: metrics, action: keep}
+      - {source_labels: [__meta_kubernetes_pod_node_name], target_label: node}
+  - job_name: nginx-ingress
+    static_configs: [{targets: [pawprint-nginx-metrics:9113]}]
+  - job_name: pawprint-http
+    metrics_path: /probe
+    params: {module: [http_200]}
+    static_configs:
+      - targets: [http://pawprint-nginx-nginx-ingress-controller/]
+        labels: {app: PetClinic, route: petclinic}
+      - targets: [http://pawprint-nginx-nginx-ingress-controller/api/reports/summary]
+        labels: {app: Reporting, route: reporting}
+    relabel_configs:
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: pawprint-blackbox:9115}
+  - job_name: monitoring-ingress
+    metrics_path: /probe
+    static_configs:
+      - targets: [http://pawprint-nginx-nginx-ingress-controller/]
+        labels: {app: Grafana, module: grafana_ingress}
+      - targets: [http://pawprint-nginx-nginx-ingress-controller/]
+        labels: {app: Prometheus, module: prometheus_ingress}
+      - targets: [http://pawprint-nginx-nginx-ingress-controller/]
+        labels: {app: Alertmanager, module: alertmanager_ingress}
+    relabel_configs:
+      - {source_labels: [module], target_label: __param_module}
+      - {source_labels: [__address__], target_label: __param_target}
+      - {source_labels: [__param_target], target_label: instance}
+      - {target_label: __address__, replacement: pawprint-blackbox:9115}

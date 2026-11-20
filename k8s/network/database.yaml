@@ -18,6 +18,10 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/instance: postgres-replica
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pawprint-postgres-exporter
+              pawprint.io/role: primary
       ports:
         - protocol: TCP
           port: 5432
@@ -37,6 +41,10 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: reporting
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pawprint-postgres-exporter
+              pawprint.io/role: replica
       ports:
         - protocol: TCP
           port: 5432

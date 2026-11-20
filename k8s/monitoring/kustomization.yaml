@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: pawprint
+resources: [rbac.yaml, storage.yaml, services-ingress.yaml, prometheus.yaml, alertmanager.yaml, grafana.yaml, exporters.yaml, observer.yaml, pvc-usage.yaml, network-policy.yaml]
+configMapGenerator:
+  - name: pawprint-prometheus
+    files: [prometheus.yml]
+  - name: pawprint-prometheus-rules
+    files: [rules/pawprint-alerts.yml]
+  - name: pawprint-alertmanager
+    files: [alertmanager.yml=alertmanager-config.yml]
+  - name: pawprint-blackbox
+    files: [blackbox.yml]
+  - name: pawprint-postgres-queries
+    files: [queries.yaml=postgres-queries.yaml]
+  - name: pawprint-observer
+    files: [observer.py]
+  - name: pawprint-pvc-usage
+    files: [pvc_usage.py]
+  - name: pawprint-grafana-datasource
+    files: [datasource.yml]
+  - name: pawprint-grafana-provider
+    files: [dashboard-provider.yml]
+  - name: pawprint-grafana-dashboards
+    files: [pawprint-dashboard.json, dashboards/overview.json, dashboards/kubernetes.json, dashboards/postgresql.json, dashboards/application.json, dashboards/ingress.json, dashboards/storage.json, dashboards/backup.json, dashboards/sre-slo.json, dashboards/postgresql-performance.json, dashboards/resource-efficiency.json, dashboards/alerts-incidents.json]

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawprint-observer
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-observer}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-observer}
+    spec:
+      serviceAccountName: pawprint-observer
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: observer
+          image: ghcr.io/mohammadafzalzadeh/pawprint-kubernetes-reporting@sha256:05e1fa332aed008e46acf695f3cf15934d96fe6533462dfddad214ceebdac3aa
+          command: [python, /app/observer.py]
+          ports: [{name: metrics, containerPort: 9108}]
+          readinessProbe: {httpGet: {path: /metrics, port: metrics}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /metrics, port: metrics}, periodSeconds: 30}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 96Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: script, mountPath: /app/observer.py, subPath: observer.py, readOnly: true}
+            - {name: backups, mountPath: /backup, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: script, configMap: {name: pawprint-observer}}
+        - {name: backups, persistentVolumeClaim: {claimName: petclinic-backups, readOnly: true}}
+        - {name: tmp, emptyDir: {sizeLimit: 16Mi}}

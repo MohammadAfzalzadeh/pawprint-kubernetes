@@ -1,0 +1,151 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawprint-blackbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-blackbox}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-blackbox}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: blackbox
+          image: ghcr.io/prometheus/blackbox-exporter:v0.29.1@sha256:ea1c7aa3ef3f307cd03e85f34abb604478ccb90b567fc690da0cd9776da76b13
+          args: ['--config.file=/config/blackbox.yml']
+          ports: [{name: http, containerPort: 9115}]
+          readinessProbe: {httpGet: {path: /-/ready, port: http}, periodSeconds: 10}
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext: {runAsUser: 65534, runAsGroup: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: config, mountPath: /config, readOnly: true}]
+      volumes: [{name: config, configMap: {name: pawprint-blackbox}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawprint-kube-state-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-kube-state-metrics}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-kube-state-metrics}
+    spec:
+      serviceAccountName: pawprint-kube-state-metrics
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: kube-state-metrics
+          image: k8s-mirror.liara.ir/kube-state-metrics/kube-state-metrics:v2.17.0
+          args:
+            - '--metric-labels-allowlist=pods=[app.kubernetes.io/name,app.kubernetes.io/instance]'
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /, port: http}, periodSeconds: 10}
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {cpu: 150m, memory: 128Mi}
+          securityContext: {runAsUser: 65534, runAsGroup: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pawprint-node-exporter
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-node-exporter}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-node-exporter}
+    spec:
+      automountServiceAccountToken: false
+      tolerations: [{operator: Exists, effect: NoSchedule}]
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: quay-mirror.liara.ir/prometheus/node-exporter:v1.10.2
+          args:
+            - --path.rootfs=/host
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
+          ports: [{name: metrics, containerPort: 9100}]
+          readinessProbe: {httpGet: {path: /, port: metrics}, periodSeconds: 10}
+          resources:
+            requests: {cpu: 10m, memory: 24Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: root, mountPath: /host, readOnly: true, mountPropagation: HostToContainer}]
+      volumes: [{name: root, hostPath: {path: /, type: Directory}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawprint-postgres-primary-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-postgres-exporter, pawprint.io/role: primary}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-postgres-exporter, pawprint.io/role: primary}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: exporter
+          image: quay-mirror.liara.ir/prometheuscommunity/postgres-exporter:v0.18.1
+          args: ['--extend.query-path=/config/queries.yaml']
+          env: [{name: DATA_SOURCE_NAME, valueFrom: {secretKeyRef: {name: pawprint-postgres-monitoring, key: primary_dsn}}}]
+          ports: [{name: metrics, containerPort: 9187}]
+          readinessProbe: {httpGet: {path: /metrics, port: metrics}, timeoutSeconds: 5, periodSeconds: 10}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 150m, memory: 96Mi}
+          securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: queries, mountPath: /config, readOnly: true}]
+      volumes: [{name: queries, configMap: {name: pawprint-postgres-queries}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pawprint-postgres-replica-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: pawprint-postgres-exporter, pawprint.io/role: replica}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: pawprint-postgres-exporter, pawprint.io/role: replica}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: exporter
+          image: quay-mirror.liara.ir/prometheuscommunity/postgres-exporter:v0.18.1
+          args: ['--extend.query-path=/config/queries.yaml']
+          env: [{name: DATA_SOURCE_NAME, valueFrom: {secretKeyRef: {name: pawprint-postgres-monitoring, key: replica_dsn}}}]
+          ports: [{name: metrics, containerPort: 9187}]
+          readinessProbe: {httpGet: {path: /metrics, port: metrics}, timeoutSeconds: 5, periodSeconds: 10}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 150m, memory: 96Mi}
+          securityContext: {runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: queries, mountPath: /config, readOnly: true}]
+      volumes: [{name: queries, configMap: {name: pawprint-postgres-queries}}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-postgres-primary-exporter
+spec:
+  selector: {app.kubernetes.io/name: pawprint-postgres-exporter, pawprint.io/role: primary}
+  ports: [{name: metrics, port: 9187, targetPort: metrics}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pawprint-postgres-replica-exporter
+spec:
+  selector: {app.kubernetes.io/name: pawprint-postgres-exporter, pawprint.io/role: replica}
+  ports: [{name: metrics, port: 9187, targetPort: metrics}]
