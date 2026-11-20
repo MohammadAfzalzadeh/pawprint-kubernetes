@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pawprint-disposable-database-isolation
+  namespace: pawprint
+spec:
+  podSelector:
+    matchLabels:
+      pawprint.io/disposable-database: "true"
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []

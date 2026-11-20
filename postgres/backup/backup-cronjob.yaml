@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: petclinic-backups
+  namespace: pawprint
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 3Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: petclinic-backup
+  namespace: pawprint
+spec:
+  schedule: 0 */6 * * *
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: pg-dump
+            image: postgres:18.6-trixie
+            imagePullPolicy: IfNotPresent
+            command:
+            - bash
+            - /operations/backup.sh
+            env:
+            - name: APP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-primary-auth
+                  key: app_password
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+            volumeMounts:
+            - name: backup
+              mountPath: /backup
+            - name: operations
+              mountPath: /operations
+              readOnly: true
+          volumes:
+          - name: backup
+            persistentVolumeClaim:
+              claimName: petclinic-backups
+          - name: operations
+            configMap:
+              name: pawprint-backup-tools
+          automountServiceAccountToken: false
+        metadata:
+          labels:
+            app.kubernetes.io/name: petclinic-backup
+      activeDeadlineSeconds: 300
+  timeZone: Etc/UTC
+  startingDeadlineSeconds: 600

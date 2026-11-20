@@ -1,0 +1,2 @@
+# The manual backup Job is derived from the deployed CronJob by scripts/backup.sh.
+# This keeps the manual and scheduled backup inputs and implementation identical.
