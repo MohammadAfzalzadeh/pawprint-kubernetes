@@ -63,7 +63,7 @@ Verified against the existing `kind-pawprint` context on 2026-11-19. All three n
 | Isolated restore | PASS | `petclinic-restore-test-xwh58` restored into a disposable PostgreSQL 18.6 instance. Seven table hashes, 21 constraints, 15 indexes and six sequences matched. |
 | Bootstrap repeat and rollback guard | PASS | `petclinic-bootstrap-test-599fv` verified new provisioning, preservation on repeat and rejection of unmarked pre-existing data. |
 | Application Pod failure | PASS | ReplicaSet replaced the selected Pod and all 40 sampled requests returned 200. |
-| Worker failure | BLOCKED | Application-only evacuation procedure prepared. Requires explicit approval for the selected worker test. Local database volumes remain on their original nodes. |
+| Worker failure | PENDING | Application-only evacuation awaits operator approval and execution. [Worker evacuation status](failure-testing.md#worker-evacuation-status) |
 | Replica failure | PASS | Reporting degraded while PetClinic stayed up and recovered after scale-up with the existing claim. |
 | Recovery documented | PASS | Read-only recovery precheck passed. Manual fencing and promotion are documented. |
 | Live Primary promotion | NOT TESTED | Requires separate approval and verified fencing. |

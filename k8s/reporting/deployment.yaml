@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: reporting
-        image: pawprint/reporting:1.0.0
+        image: ghcr.io/mohammadafzalzadeh/pawprint-kubernetes-reporting@sha256:05e1fa332aed008e46acf695f3cf15934d96fe6533462dfddad214ceebdac3aa
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

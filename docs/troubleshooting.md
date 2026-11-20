@@ -12,3 +12,10 @@
 | Host memory pressure | Observe `free -h`, `vmstat` and memory PSI. Start components sequentially and wait for stable measurements. |
 
 The loopback demo Ingress disables its default HTTPS redirect. PetClinic uses relative redirects so port 8080 remains in the browser's origin. The management listener uses port 8081 and the Ingress Service routes only to 8080.
+
+## Observed failures and fixes
+
+| Failure | Diagnostic evidence and cause | Fix and verification |
+| --- | --- | --- |
+| PostgreSQL bootstrap Job failed | PostgreSQL logged `syntax error at or near "$"` and the transaction rolled back. Kubernetes argument expansion interfered with the SQL dollar delimiters in the Job command. | The replacement Job uses a named SQL delimiter. A fresh bootstrap verified the seed data, marker, schema and role grants. [Bootstrap investigation](backup-bootstrap-evidence.md#root-causes-and-corrections) |
+| PetClinic redirected away from loopback port 8080 | The Ingress first redirected HTTP to HTTPS. After fixing that, a form submission still returned an absolute redirect without the host's `:8080` because the forwarded port reflected the controller listener. | The loopback route disables the HTTPS redirect, and PetClinic sends relative redirects. The owner creation redirect stayed on the same origin and the Ingress returned HTTP 200. [Ingress acceptance evidence](acceptance-report.md#application) |

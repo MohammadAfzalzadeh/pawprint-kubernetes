@@ -56,6 +56,32 @@ kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.n
 
 Expected nodes are one control plane and two workers, all reporting Kubernetes `v1.37.0` and reaching `Ready`. Confirm CoreDNS and other system pods are Ready with `kubectl get pods -A`. To check host resource use, run `docker stats --no-stream`, `free -h`, `swapon --show`, and `df -h / /var` in the host terminal after startup.
 
+## Cross-worker network and Service DNS evidence
+
+On 2026-11-20, direct requests between the two Ready PetClinic Pods returned HTTP 200 in both directions across the Kind workers. Each request targeted the peer Pod IP on port 8080. A request using the PetClinic Service DNS name also returned HTTP 200.
+
+| Source worker | Target | Result |
+| --- | --- | --- |
+| `pawprint-worker` | PetClinic Pod `10.244.2.15` on `pawprint-worker2` | HTTP 200 |
+| `pawprint-worker2` | PetClinic Pod `10.244.1.23` on `pawprint-worker` | HTTP 200 |
+| `pawprint-worker` | `petclinic.pawprint.svc.cluster.local:8080` | HTTP 200 |
+
+The PetClinic Pod on `pawprint-worker` also resolved `petclinic`, `reporting`, `postgres-primary` and `postgres-replica` under `pawprint.svc.cluster.local` to `10.96.198.124`, `10.96.67.232`, `10.96.239.176` and `10.96.100.61`, respectively.
+
+To reproduce the checks, list the currently Ready Pods on separate workers and use their current names and IPs. Set `source_pod` to one of those names and `peer_ip` to the other Pod's IP. Swap the pair for the reverse check.
+
+```bash
+k() { kubectl --kubeconfig "$HOME/.kube/pawprint-config" --context kind-pawprint -n pawprint "$@"; }
+k get pods -l app.kubernetes.io/name=petclinic -o wide
+k exec "$source_pod" -c petclinic -- curl -fsS --max-time 6 -o /dev/null \
+  -w 'Peer Pod HTTP %{http_code}\n' "http://$peer_ip:8080/"
+for service in petclinic reporting postgres-primary postgres-replica; do
+  k exec "$source_pod" -c petclinic -- getent hosts "$service.pawprint.svc.cluster.local"
+done
+k exec "$source_pod" -c petclinic -- curl -fsS --max-time 6 -o /dev/null \
+  -w 'PetClinic Service HTTP %{http_code}\n' http://petclinic.pawprint.svc.cluster.local:8080/
+```
+
 ## Safe deletion
 
 First confirm the dedicated kubeconfig and target cluster:
@@ -73,7 +99,3 @@ KUBECONFIG="$HOME/.kube/pawprint-config" kind delete cluster --name pawprint
 ```
 
 This removes the Kind node containers for `pawprint`. Do not use Docker prune commands. This does not request deletion of the global kubeconfig or the existing `kind-dbaas` context. Keep the dedicated kubeconfig unless you separately decide to remove it.
-
-## Status
-
-This document describes the planned configuration. No cluster was created and no kubeconfig was modified during preparation. Record actual node readiness and host resource measurements here after running the host commands.

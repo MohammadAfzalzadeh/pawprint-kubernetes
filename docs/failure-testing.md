@@ -18,8 +18,14 @@ The 2026-11-19 Pod deletion test returned HTTP 200 for all 40 samples. The stand
 
 Run the [PetClinic image rollout and rollback exercise](petclinic-image-rollout.md) separately to test a change between two real application releases and record readiness and HTTP responses.
 
-After approval, run from the repository root.
+## Worker evacuation status
+
+**Pending.** No worker evacuation or shutdown has been executed for this acceptance test. The planned exercise limits eviction to PetClinic and leaves the database Pods running. Collect node and Pod placement, HTTP results for PetClinic and Reporting through the full replacement window, and the final Ready count. Compare PostgreSQL Pod and PVC UIDs and PV bindings before and after. Record when the worker becomes schedulable again.
+
+The script samples both HTTP routes independently before eviction, throughout replacement and after both PetClinic Pods are Ready on the surviving worker. It expects HTTP 200 on both routes. It also compares the database Pod UIDs, node placement, restart counts and mounted PVC UIDs and PV bindings. The script attempts to uncordon the target on exit, including after a failure. Review the timeline and evidence under `.pawprint/evidence/worker-evacuation.*`. Use those results to report application evacuation. The worker itself remains running throughout this exercise.
+
+After approval and a fresh placement check, run from the repository root with `approved_worker` set to the chosen node name.
 
 ```bash
-bash scripts/test-worker-failure.sh pawprint-worker2 --operator-approved
+bash scripts/test-worker-failure.sh "$approved_worker" --operator-approved
 ```

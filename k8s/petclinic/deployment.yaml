@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: petclinic
-        image: pawprint/petclinic:500158f73241
+        image: ghcr.io/mohammadafzalzadeh/pawprint-kubernetes-petclinic@sha256:0a94cdce2f652a8ae6e1dd60342b6f419ca6403ec596080813ef20207fee1a4a
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

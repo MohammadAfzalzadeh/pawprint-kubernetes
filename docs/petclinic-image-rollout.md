@@ -66,7 +66,8 @@ k get pods -l app.kubernetes.io/name=petclinic -o wide
 curl -sS --max-time 6 -o /dev/null -w '%{http_code} %{redirect_url}\n' \
   'http://127.0.0.1:8080/vets.html?page=9999'
 
-k apply -f k8s/petclinic/deployment.yaml
+k set image --local -f k8s/petclinic/deployment.yaml \
+  petclinic=pawprint/petclinic:500158f73241 -o yaml | k apply -f -
 k rollout status deployment/petclinic --timeout=210s
 make verify
 ```

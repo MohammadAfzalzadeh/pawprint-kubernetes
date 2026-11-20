@@ -2,7 +2,7 @@
 
 ## Prepare the Ubuntu host
 
-Use an amd64 Ubuntu host with Docker and BuildKit, Kind v0.33.0, kubectl v1.37.x, Helm, Git, GNU Make, Bash, Python 3, and curl. Your user needs access to the Docker daemon. Run the following commands from the PawPrint project root. Use the full project checkout, including `nginx-ingress-2.9.0.tgz`, and download Spring PetClinic separately if `spring-petclinic/` is absent. The pinned source revision matches the image tag in the Kubernetes Deployment.
+Use an amd64 Ubuntu host with Docker, Kind v0.33.0, kubectl v1.37.x, Helm, Git, GNU Make, Bash, Python 3, and curl. Your user needs access to the Docker daemon. Run the following commands from the PawPrint project root. Use the full project checkout, including `nginx-ingress-2.9.0.tgz`.
 
 ```bash
 docker info --format 'Docker {{.ServerVersion}}'
@@ -13,15 +13,9 @@ free -h
 swapon --show
 df -h / /home /var
 ss -ltn '( sport = :8080 or sport = :8443 )'
-
-if [ ! -d spring-petclinic ]; then
-  git clone https://github.com/spring-projects/spring-petclinic.git spring-petclinic
-  git -C spring-petclinic checkout --detach 500158f732419217507c7656904b8e6aa1bcc0d6
-fi
-git -C spring-petclinic rev-parse HEAD
 ```
 
-Check that `8080` and `8443` are free and that the source revision is `500158f732419217507c7656904b8e6aa1bcc0d6` before continuing. Use a clean PetClinic checkout for a reproducible build. A cold build needs access to the pinned Kind node image, Liara's Docker Hub mirror for workload images, Maven Central for PetClinic, and the Python package index for Reporting. See [image builds](docker-guide.md) and [registry mirrors](image-registry-mirrors.md) for registry troubleshooting.
+For a new cluster, check that `8080` and `8443` are free. A fresh setup needs access to the pinned Kind node image, Liara's Docker Hub mirror for PostgreSQL and NGINX Ingress, and GHCR from the Kind workers. [Registry mirror troubleshooting](image-registry-mirrors.md)
 
 ## Create the Kind cluster
 
@@ -34,13 +28,26 @@ kind create cluster --name pawprint --config ./kind-pawprint.yaml \
 make preflight
 ```
 
-`make preflight` requires a running cluster. Expect all three nodes to be `Ready` and the `standard` StorageClass to exist. PawPrint uses the dedicated kubeconfig and context `kind-pawprint`. See [Kind setup](kind-cluster.md) for the pinned image and host ports. The Ansible mirror configuration is optional for this run because the image loader imports the workload images on each node.
+`make preflight` requires a running cluster. Expect all three nodes to be `Ready` and the `standard` StorageClass to exist. PawPrint uses the dedicated kubeconfig and context `kind-pawprint`. See [Kind setup](kind-cluster.md) for the pinned image and host ports. The Ansible mirror configuration is optional.
 
-## Build, load, and deploy
+## Deploy with GHCR
 
-To deploy the published PetClinic and Reporting images, follow the [GHCR deployment guide](ghcr-deployment.md) after the `primary bootstrap replica` stages. The Docker build and Kind load commands for those two applications are for local images.
+Follow the [README setup steps](../README.md#setup). The PetClinic and Reporting Deployment manifests pin GHCR digests. To select another release or set up private package access, see the [GHCR deployment guide](ghcr-deployment.md).
 
-Run these commands in order and stop at the first failure. `make secrets` prompts for four database passwords and preserves an existing Secret. It creates `pawprint/postgres-primary-auth` on a fresh cluster. The [placeholder Secret](../k8s/secret.example.yaml) records the six keys and uses a separate example name. On a host under memory pressure, use the staged commands below to build and roll out one component at a time.
+`make secrets` prompts for four database passwords and preserves an existing Secret. It creates `pawprint/postgres-primary-auth` on a fresh cluster. The [placeholder Secret](../k8s/secret.example.yaml) records the six keys and uses a separate example name.
+
+## Build, load, and deploy locally
+
+For local application builds, use Docker BuildKit and a clean Spring PetClinic checkout. The pinned source revision is `500158f732419217507c7656904b8e6aa1bcc0d6`. A cold build needs access to the base images, Maven Central for PetClinic and the Python package index for Reporting. [Image builds](docker-guide.md)
+
+```bash
+if [ ! -d spring-petclinic ]; then
+  git clone https://github.com/spring-projects/spring-petclinic.git spring-petclinic
+fi
+git -C spring-petclinic checkout --detach 500158f732419217507c7656904b8e6aa1bcc0d6
+```
+
+Run these commands after creating the cluster and stop at the first failure. Build and roll out one component at a time on a host under memory pressure.
 
 ```bash
 make secrets
@@ -48,14 +55,16 @@ bash scripts/load-images.sh postgres
 make deploy STAGES="primary bootstrap replica"
 bash scripts/build-images.sh reporting
 bash scripts/load-images.sh reporting
-make deploy STAGES=reporting
+make deploy STAGES=reporting IMAGE_SOURCE=local
 bash scripts/build-images.sh petclinic
 bash scripts/load-images.sh petclinic
-make deploy STAGES=petclinic
+make deploy STAGES=petclinic IMAGE_SOURCE=local
 bash scripts/load-images.sh ingress
 make deploy STAGES=ingress
 make deploy STAGES="network backup"
 ```
+
+## Verify the deployment
 
 Pause between stages to inspect `free -h`, `swapon --show`, `cat /proc/pressure/memory` and node conditions. At steady state, the workloads request about 1.25 GiB of memory and have combined limits of about 1.75 GiB, excluding cluster overhead and transient backup and restore Jobs. The nodes share one physical memory pool. Reclaimable host cache and swap use can vary during builds.
 

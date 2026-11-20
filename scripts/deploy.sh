@@ -4,9 +4,16 @@ source "$(dirname -- "$0")/common.sh"
 source scripts/database-operations.sh
 source scripts/ghcr.sh
 check_cluster
-case "${IMAGE_SOURCE:-local}" in
+image_source=${IMAGE_SOURCE:-ghcr}
+case "$image_source" in
   local) ;;
-  ghcr) check_ghcr_release ;;
+  ghcr)
+    if [[ -n "${GHCR_RELEASE:-}" ]]; then
+      check_ghcr_release
+    else
+      check_ghcr_pull_secret
+    fi
+    ;;
   *) echo 'IMAGE_SOURCE must be local or ghcr.' >&2; exit 2 ;;
 esac
 recovery_idle
@@ -24,11 +31,24 @@ confirmed_image() {
     docker exec "$node" crictl inspecti "$1" >/dev/null
   done
 }
-apply_ghcr_application() {
-  local component=$1 rendered path="k8s/$1"
+apply_application() {
+  local component=$1 path="k8s/$1" rendered image revision
   shift
-  rendered=$(ns create --dry-run=client --validate=false -f "$path/deployment.yaml" -o json |
-    python3 scripts/ghcr_release.py render "$GHCR_RELEASE" "${GHCR_PULL_SECRET:-}" "$component")
+  if [[ "$image_source" == local ]]; then
+    image=pawprint/reporting:1.0.0
+    if [[ "$component" == petclinic ]]; then
+      revision=$(git -C spring-petclinic rev-parse --short=12 HEAD)
+      image="pawprint/petclinic:$revision"
+    fi
+    confirmed_image "$image"
+    rendered=$(ns set image --local -f "$path/deployment.yaml" "$component=$image" -o json)
+  elif [[ -n "${GHCR_RELEASE:-}${GHCR_PULL_SECRET:-}" ]]; then
+    rendered=$(ns create --dry-run=client --validate=false -f "$path/deployment.yaml" -o json |
+      python3 scripts/ghcr_release.py render "${GHCR_RELEASE:-}" "${GHCR_PULL_SECRET:-}" "$component")
+  else
+    apply -f "$path" "$@"
+    return
+  fi
   printf '%s\n' "$rendered" | k apply --dry-run=server --validate=strict \
     -f "$path/configmap.yaml" -f "$path/service.yaml" "$@" -f - >/dev/null
   printf '%s\n' "$rendered" | k apply -f "$path/configmap.yaml" -f "$path/service.yaml" "$@" -f -
@@ -81,22 +101,12 @@ stage() {
       ;;
     reporting)
       rollout "statefulset/$(db_set replica)"
-      if [[ "${IMAGE_SOURCE:-local}" == ghcr ]]; then
-        apply_ghcr_application reporting
-      else
-        confirmed_image pawprint/reporting:1.0.0
-        apply -f k8s/reporting
-      fi
+      apply_application reporting
       rollout deployment/reporting
       ;;
     petclinic)
       verify_bootstrap_objects
-      if [[ "${IMAGE_SOURCE:-local}" == ghcr ]]; then
-        apply_ghcr_application petclinic -f k8s/policies/petclinic-pdb.yaml
-      else
-        confirmed_image "pawprint/petclinic:$(git -C spring-petclinic rev-parse --short=12 HEAD)"
-        apply -f k8s/petclinic -f k8s/policies/petclinic-pdb.yaml
-      fi
+      apply_application petclinic -f k8s/policies/petclinic-pdb.yaml
       rollout deployment/petclinic
       ;;
     ingress)

@@ -36,7 +36,8 @@ def render(component, image, secret):
     containers = [c for c in spec["containers"] if c["name"] == component]
     if len(containers) != 1:
         raise ValueError(f"Expected one container named {component}")
-    containers[0]["image"] = image
+    if image is not None:
+        containers[0]["image"] = image
     configure_pull(spec, secret)
     return deployment
 
@@ -64,12 +65,15 @@ def main(args):
     mode, path, secret, *rest = args
     if secret and not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", secret):
         raise ValueError("Invalid imagePullSecret name")
+    if mode == "render" and len(rest) == 1:
+        component, = rest
+        image = release_images(path)[component] if path else None
+        print(json.dumps(render(component, image, secret)))
+        return
     images = release_images(path)
     if mode == "check" and not rest:
         return
-    if mode == "render" and len(rest) == 1:
-        print(json.dumps(render(rest[0], images[rest[0]], secret)))
-    elif mode == "probe" and len(rest) == 2:
+    if mode == "probe" and len(rest) == 2:
         print(json.dumps(probe(rest[0], images[rest[0]], secret, rest[1])))
     else:
         raise ValueError("Expected check, render <component>, or probe <component> <hostname>")

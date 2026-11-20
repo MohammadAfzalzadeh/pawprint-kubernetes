@@ -18,7 +18,9 @@ docker push "$prefix-petclinic:$tag"
 docker push "$prefix-reporting:$tag"
 ```
 
-Open a successful run and download the `ghcr-release` artifact. Extract `release.json` into `.pawprint/ghcr/` from the repository root. Save the run URL with the release so its tag, build logs and digests stay traceable. The deploy script uses the digest references in `release.json`. `IfNotPresent` allows a node to reuse the same digest from its cache. [Kubernetes image pull policies](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
+The checked-in Deployment manifests pin the verified GHCR digests. `make deploy STAGES="reporting petclinic"` uses those digests by default. `IfNotPresent` allows a node to reuse the same digest from its cache. [Kubernetes image pull policies](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
+
+To deploy another release or run the worker pull checks, open the relevant successful run and download its `ghcr-release` artifact. Extract `release.json` into `.pawprint/ghcr/` from the repository root and set `GHCR_RELEASE`. Keep the run URL and the artifact together so you can trace the build or redeploy the same digests.
 
 ```bash
 mkdir -p .pawprint/ghcr
@@ -45,7 +47,7 @@ imagePullSecrets:
 
 ## Prove registry pulls and deploy
 
-Use the dedicated `kind-pawprint` context. The PostgreSQL Primary, bootstrap, and Replica stages must already be complete for the application deployment. On a new cluster, follow the [deployment guide](deployment-guide.md) through the database stages. Use the GHCR commands below for Reporting and PetClinic, then continue with Ingress, network policies and backup.
+Use the dedicated `kind-pawprint` context and set `GHCR_RELEASE` as shown above. Complete the PostgreSQL Primary, bootstrap and Replica stages before deploying the applications. On a new cluster, follow the [README setup steps](../README.md#setup) through the database stages, then run the commands below for Reporting and PetClinic before continuing with Ingress, network policies and backup.
 
 From Bash, run the following in order. The worker test schedules one short-lived Pod per image on each worker. `imagePullPolicy: Always` makes the kubelet contact GHCR for the requested digest even when image layers are already cached. Each result includes the worker name, a successful `Pulled` event, the requested digest and the runtime image ID. Retain the output and the Actions run URL as release evidence. [Kubernetes image pull behavior](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy)
 
@@ -64,7 +66,7 @@ curl -fsS -o /dev/null -w 'PetClinic HTTP %{http_code}\n' http://localhost:8080/
 curl -fsS http://localhost:8080/api/reports/summary
 ```
 
-PetClinic rolls forward one Pod at a time using its existing surge and readiness settings. Reporting has one replica and may be briefly unavailable during its rollout. For rollback to a previously published version, repeat the worker check and deploy using its saved `release.json`. To return to locally loaded images, follow the [local build and load steps](deployment-guide.md#build-load-and-deploy) and deploy both stages with `IMAGE_SOURCE=local`.
+PetClinic rolls forward one Pod at a time using its existing surge and readiness settings. Reporting has one replica and may be briefly unavailable during its rollout. For rollback to a previously published version, repeat the worker check and deploy using its saved `release.json`. To use the pinned manifests again, unset `GHCR_RELEASE` before deploying. For locally loaded images, follow the [local build and load steps](deployment-guide.md#build-load-and-deploy-locally).
 
 For `ImagePullBackOff`, describe the affected Pod and inspect its Events for authorization, DNS, timeouts or a missing digest. If Kind's optional GHCR mirror is configured, treat the worker probe as proof that the worker resolved a GHCR image reference through its configured registry route. Verify the actual endpoint separately if the evidence needs to distinguish direct GHCR from mirror traffic. [PawPrint registry mirrors](image-registry-mirrors.md)
 
